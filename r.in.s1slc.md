@@ -120,6 +120,8 @@ about 1.2 GB per sub-swath and polarization. Use **swath**,
 **bbox** (bursts intersecting a longitude/latitude box) to import only
 the area of interest. The **-l** flag lists the bursts of each
 sub-swath with their burst ID, azimuth time and footprint, and exits.
+A **bursts** index beyond the number of bursts of a selected sub-swath
+is an error.
 
 ## NOTES
 
