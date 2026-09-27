@@ -883,7 +883,7 @@ class BinaryRaster:
         TMP_FILES.remove(self.path)
 
 
-def parse_bursts(answers, nbursts):
+def parse_bursts(answers, nbursts, swath):
     selected = set()
     for item in answers:
         item = item.strip()
@@ -896,8 +896,14 @@ def parse_bursts(answers, nbursts):
             gs.fatal(_("Invalid burst selection <{}>").format(item))
         if a < 1 or b < a:
             gs.fatal(_("Invalid burst range <{}>").format(item))
+        if b > nbursts:
+            gs.fatal(
+                _("Burst selection <{}> out of range: sub-swath {} has {} bursts").format(
+                    item, swath, nbursts
+                )
+            )
         selected.update(range(a, b + 1))
-    return sorted(k - 1 for k in selected if k <= nbursts)
+    return sorted(k - 1 for k in selected)
 
 
 def contiguous_runs(indices):
@@ -960,7 +966,12 @@ def write_gcps(group, layout, transform):
     np = sw.np
     rows = (np.asarray(sw.grid_times) - layout.t0) / sw.dt
     rows = rows[(rows >= 0) & (rows <= layout.nrows - 1)]
-    rows = np.unique(np.concatenate([[0.0, layout.nrows - 1.0], rows]))
+    # Grid lines fall a fraction of a line off the first and last rows (grid
+    # and burst times differ by microseconds); such near-duplicates would
+    # give coincident GCPs, so the exact first and last rows replace them.
+    ends = np.array([0.0, layout.nrows - 1.0])
+    rows = rows[np.abs(rows[:, None] - ends[None, :]).min(axis=1) > 0.5]
+    rows = np.unique(np.concatenate([ends, rows]))
     cols = np.array(sw.grid_pixels[0])
     times = layout.t0 + rows * sw.dt
     lat = sw.geo_lut("latitude").rows(times, cols)
@@ -1077,7 +1088,7 @@ def main():
             continue
         nb = len(sw.bursts)
         if options["bursts"]:
-            sel = parse_bursts(options["bursts"].split(","), nb)
+            sel = parse_bursts(options["bursts"].split(","), nb, sw.swath)
         elif bbox:
             sel = []
             for k in range(nb):
