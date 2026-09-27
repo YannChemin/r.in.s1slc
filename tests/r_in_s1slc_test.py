@@ -197,6 +197,24 @@ def test_geometry_and_gcps(xy_session, safe_product):
     np.testing.assert_allclose(lon, 55.0, atol=1e-9)
 
 
+@pytest.mark.parametrize("burst", [1, 2, 3])
+def test_gcps_distinct(xy_session, safe_product, burst):
+    # Grid lines 1 us after a burst start must not duplicate the first row.
+    proc = run_module(xy_session, "b", input=safe_product, output="g", bursts=str(burst), measure="amplitude")
+    assert proc.returncode == 0, proc.stderr
+    env = gs.gisenv(env=xy_session.env)
+    points = np.loadtxt(
+        os.path.join(
+            env["GISDBASE"], env["LOCATION_NAME"], env["MAPSET"], "group", f"g_iw1_vv_b{burst:02d}", "POINTS"
+        ),
+        comments="#",
+    )
+    image_rows = np.unique(points[:, 1])
+    assert np.diff(image_rows).min() > 0.5
+    assert np.unique(points[:, :2], axis=0).shape[0] == points.shape[0]
+    assert image_rows[0] == 0.5 and image_rows[-1] == LPB - 0.5
+
+
 def test_metadata(xy_session, safe_product):
     proc = run_module(xy_session, input=safe_product, output="s1", measure="phase")
     assert proc.returncode == 0, proc.stderr
@@ -233,6 +251,7 @@ def test_zip_and_bbox(xy_session, safe_zip):
     [
         ("n", {"measure": "complex"}, "noise"),
         ("", {"bursts": "1,3"}, "contiguous"),
+        ("b", {"bursts": "2-4"}, "out of range"),
     ],
 )
 def test_failures(xy_session, safe_product, flags, kwargs, message):

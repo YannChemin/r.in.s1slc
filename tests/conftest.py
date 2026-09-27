@@ -30,6 +30,9 @@ FIRST_VALID_LINE = 2
 LAST_VALID_LINE = 37
 FIRST_VALID_SAMPLE = 3
 LAST_VALID_SAMPLE = 56
+# Real products annotate the geolocation grid a fraction of a microsecond off
+# the burst start times; 1 us reproduces that (1e-4 line here).
+GRID_TIME_OFFSET = 1e-6
 NAME = "S1A_IW_SLC__1SDV_20230112T142509_20230112T142510_046752_059AD8_TEST.SAFE"
 STEM = "s1a-iw1-slc-vv-20230112t142509-20230112t142510-046752-059ad8-004"
 SCRIPT = str(Path(__file__).resolve().parent.parent / "r.in.s1slc.py")
@@ -96,7 +99,7 @@ def annotation_xml():
     points = ""
     for k in range(NBURSTS + 1):
         line = min(k * LPB, nlines - 1)
-        t = burst_time(k) if k < NBURSTS else last
+        t = (burst_time(k) if k < NBURSTS else last) + GRID_TIME_OFFSET
         for p in (0, 20, 40, NSAMPLES - 1):
             points += f"""
       <geolocationGridPoint>
