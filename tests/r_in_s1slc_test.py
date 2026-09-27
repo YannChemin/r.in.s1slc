@@ -95,6 +95,47 @@ def test_bursts_separate(xy_session, safe_product):
             assert np.all(np.isnan(power[line]))
 
 
+def read_description(session, name):
+    env = gs.gisenv(env=session.env)
+    path = os.path.join(
+        env["GISDBASE"], env["LOCATION_NAME"], env["MAPSET"], "cell_misc", name, "description.json"
+    )
+    with open(path) as fd:
+        return json.load(fd)
+
+
+def test_deburst_segments(xy_session, safe_product):
+    proc = run_module(xy_session, input=safe_product, output="s1")
+    assert proc.returncode == 0, proc.stderr
+    segments = read_description(xy_session, "s1_iw1_vv_i")["raster_geometry"]["segments"]
+    rows = expected_deburst()
+    assert sum(s["rows"] for s in segments) == len(rows)
+    assert [s["burst"] for s in segments] == [1, 2, 3]
+    assert [s["burst_id"] for s in segments] == [500, 501, 502]
+    for s in segments:
+        for r in range(s["first_row"], s["first_row"] + s["rows"]):
+            k, line, _t = rows[r]
+            assert (k + 1, line) == (s["burst"], s["first_line"] + r - s["first_row"])
+
+
+def test_bursts_complex_for_interferometry(xy_session, safe_product):
+    """All bursts kept whole, overlaps included, as needed by ESD."""
+    proc = run_module(xy_session, "b", input=safe_product, output="s1")
+    assert proc.returncode == 0, proc.stderr
+    valid = valid_columns()
+    for k in range(3):
+        name = f"s1_iw1_vv_b{k + 1:02d}"
+        i = read_map(xy_session, name + "_i", null=-99999)
+        assert i.shape == (LPB, NSAMPLES)
+        for line in range(FIRST_VALID_LINE, LAST_VALID_LINE + 1):
+            assert np.all(i[line, valid] == pixel_i(k, line))
+        geometry = read_description(xy_session, name + "_i")["raster_geometry"]
+        assert geometry["debursted"] is False
+        assert geometry["segments"] == [
+            {"burst": k + 1, "burst_id": 500 + k, "first_row": 0, "rows": LPB, "first_line": 0}
+        ]
+
+
 def test_calibration_and_noise(xy_session, safe_product):
     proc = run_module(
         xy_session,

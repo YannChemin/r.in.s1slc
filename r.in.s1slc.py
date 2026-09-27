@@ -724,6 +724,7 @@ class Layout:
             line = np.arange(swath.lpb)
             self.src = k * swath.lpb + line
             self.times = swath.burst_line_time(k, line)
+            self.owner = np.full(line.size, k)
         else:
             self._deburst(swath, bursts, dt)
         self.nrows = self.src.size
@@ -764,6 +765,46 @@ class Layout:
                     break
         self.src = src
         self.times = times
+        self.owner = owner
+
+    def segments(self):
+        """Runs of output rows read from consecutive lines of one burst.
+
+        Downstream processing (coregistration, interferometry) needs the
+        burst and the line within the burst of every output row, e.g. to
+        deramp the TOPS azimuth spectrum. Rows without valid data are
+        assigned to the burst owning their azimuth time.
+        """
+        np = self.swath.np
+        sw = self.swath
+        if not self.deburst:
+            burst = np.full(self.nrows, self.bursts[0])
+            line = np.arange(self.nrows)
+        else:
+            burst = np.where(self.src >= 0, self.src // sw.lpb, self.owner)
+            t_burst = np.array([sw.bursts[k]["t"] for k in burst])
+            line = np.where(
+                self.src >= 0,
+                self.src % sw.lpb,
+                np.floor((self.times - t_burst) / sw.dt + 0.5).astype(np.int64),
+            )
+        runs = []
+        for r in range(self.nrows):
+            k, lb = int(burst[r]), int(line[r])
+            last = runs[-1] if runs else None
+            if last and last["burst"] == k + 1 and last["first_line"] + last["rows"] == lb:
+                last["rows"] += 1
+            else:
+                runs.append(
+                    {
+                        "burst": k + 1,
+                        "burst_id": sw.bursts[k].get("burst_id"),
+                        "first_row": r,
+                        "rows": 1,
+                        "first_line": lb,
+                    }
+                )
+        return runs
 
     def chunks(self):
         for r0 in range(0, self.nrows, CHUNK_ROWS):
@@ -1198,6 +1239,7 @@ def main():
             "slant_range_time_first_sample": sw.slant_range_time,
             "range_pixel_spacing": sw.range_pixel_spacing,
             "source_first_line": int(layout.src[layout.src >= 0].min()),
+            "segments": layout.segments(),
             "image_coordinates": "x = sample + 0.5, y = rows - (line + 0.5)",
         }
         mission = info.get("mission") or sw.mission

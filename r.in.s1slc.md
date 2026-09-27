@@ -97,10 +97,20 @@ Product metadata are imported with every map:
   valid samples, orbit state vectors, Doppler centroid and azimuth FM
   rate polynomials, processing information, geolocation grid), the
   output raster geometry (first line azimuth time, source lines, bursts,
-  debursting) and the measure, calibration and noise settings.
+  debursting, and the `segments` giving the burst and burst line of
+  every row) and the measure, calibration and noise settings.
 
 These are the parameters needed by downstream processing such as
 coregistration and interferometry.
+
+### Interferometry
+
+For interferometric processing import the complex signal of each
+acquisition with the **-b** flag. Every burst is then kept whole,
+including the lines it shares with its neighbours: *i.sar.coregistration*
+needs both bursts of each overlap to refine the azimuth coregistration
+by enhanced spectral diversity (ESD). Debursted images can still be
+coregistered, from the orbits alone.
 
 ### Subsetting
 
@@ -152,6 +162,16 @@ r.in.s1slc input=... output=s1 swath=IW2 bursts=4-6 measure=db \
 i.rectify -t group=s1_iw2_vv extension=_utm resolution=10
 ```
 
+Import the same bursts of two acquisitions, burst by burst, for
+interferometry with *i.sar.coregistration* and *i.sar.interferometry*:
+
+```sh
+r.in.s1slc -b input=S1A_IW_SLC__1SDV_20230112T142507_20230112T142534_046752_059AD8_A55D.zip \
+    output=s1_20230112 swath=IW2 polarization=VV bbox=55.35,25.25,55.50,25.40
+r.in.s1slc -b input=S1A_IW_SLC__1SDV_20230124T...zip \
+    output=s1_20230124 swath=IW2 polarization=VV bbox=55.35,25.25,55.50,25.40
+```
+
 ## REFERENCES
 
 - ESA, *Sentinel-1 Product Specification*, S1-RS-MDA-52-7441.
@@ -166,6 +186,8 @@ i.rectify -t group=s1_iw2_vv extension=_utm resolution=10
 
 *[i.group](https://grass.osgeo.org/grass-stable/manuals/i.group.html),
 [i.rectify](https://grass.osgeo.org/grass-stable/manuals/i.rectify.html),
+[i.sar.coregistration](i.sar.coregistration.html),
+[i.sar.interferometry](i.sar.interferometry.html),
 [i.target](https://grass.osgeo.org/grass-stable/manuals/i.target.html),
 [r.in.gdal](https://grass.osgeo.org/grass-stable/manuals/r.in.gdal.html),
 [r.in.sentinel](r.in.sentinel.html),

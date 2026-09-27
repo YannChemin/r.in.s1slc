@@ -48,6 +48,7 @@ grid).
 | Geolocation | `geometry=latitude,longitude,height,incidence_angle,elevation_angle` | from the annotation geolocation grid |
 | GCPs | always, `target=` to reproject | imagery group `POINTS` for *i.rectify* |
 | Metadata | always | *r.support*, *r.timestamp*, history, `cell_misc/<map>/description.json` |
+| Interferometry | `-b` | whole bursts with overlaps, for *i.sar.coregistration* (ESD) |
 
 Output maps are named `{output}_{swath}_{pol}_{measure}`
 (e.g. `s1_iw2_vv_i`); with `-b` a burst tag is added

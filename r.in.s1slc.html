@@ -101,10 +101,18 @@ azimuth time interval, burst list with burst IDs, times and valid
 samples, orbit state vectors, Doppler centroid and azimuth FM rate
 polynomials, processing information, geolocation grid), the output
 raster geometry (first line azimuth time, source lines, bursts,
-debursting) and the measure, calibration and noise settings.</li>
+debursting, and the <code>segments</code> giving the burst and burst
+line of every row) and the measure, calibration and noise settings.</li>
 </ul>
 <p>These are the parameters needed by downstream processing such as
 coregistration and interferometry.</p>
+<h3 id="interferometry">Interferometry</h3>
+<p>For interferometric processing import the complex signal of each
+acquisition with the <strong>-b</strong> flag. Every burst is then kept
+whole, including the lines it shares with its neighbours:
+<em>i.sar.coregistration</em> needs both bursts of each overlap to
+refine the azimuth coregistration by enhanced spectral diversity (ESD).
+Debursted images can still be coregistered, from the orbits alone.</p>
 <h3 id="subsetting">Subsetting</h3>
 <p>A full IW SLC product holds three sub-swaths of nine bursts each,
 about 1.2 GB per sub-swath and polarization. Use <strong>swath</strong>,
@@ -135,6 +143,13 @@ from the IW2 VV image, with latitude and longitude layers:</p>
 <div class="sourceCode" id="cb4"><pre class="sourceCode sh"><code class="sourceCode bash"><span id="cb4-1"><a href="#cb4-1" aria-hidden="true" tabindex="-1"></a><span class="ex">r.in.s1slc</span> input=... output=s1 swath=IW2 bursts=4-6 measure=db <span class="dt">\</span></span>
 <span id="cb4-2"><a href="#cb4-2" aria-hidden="true" tabindex="-1"></a>    calibration=sigma0 target=sharjah_utm40n</span>
 <span id="cb4-3"><a href="#cb4-3" aria-hidden="true" tabindex="-1"></a><span class="ex">i.rectify</span> <span class="at">-t</span> group=s1_iw2_vv extension=_utm resolution=10</span></code></pre></div>
+<p>Import the same bursts of two acquisitions, burst by burst, for
+interferometry with <em>i.sar.coregistration</em> and
+<em>i.sar.interferometry</em>:</p>
+<div class="sourceCode" id="cb5"><pre class="sourceCode sh"><code class="sourceCode bash"><span id="cb5-1"><a href="#cb5-1" aria-hidden="true" tabindex="-1"></a><span class="ex">r.in.s1slc</span> <span class="at">-b</span> input=S1A_IW_SLC__1SDV_20230112T142507_20230112T142534_046752_059AD8_A55D.zip <span class="dt">\</span></span>
+<span id="cb5-2"><a href="#cb5-2" aria-hidden="true" tabindex="-1"></a>    output=s1_20230112 swath=IW2 polarization=VV bbox=55.35,25.25,55.50,25.40</span>
+<span id="cb5-3"><a href="#cb5-3" aria-hidden="true" tabindex="-1"></a><span class="ex">r.in.s1slc</span> <span class="at">-b</span> input=S1A_IW_SLC__1SDV_20230124T...zip <span class="dt">\</span></span>
+<span id="cb5-4"><a href="#cb5-4" aria-hidden="true" tabindex="-1"></a>    output=s1_20230124 swath=IW2 polarization=VV bbox=55.35,25.25,55.50,25.40</span></code></pre></div>
 <h2 id="references">REFERENCES</h2>
 <ul>
 <li>ESA, <em>Sentinel-1 Product Specification</em>,
@@ -151,7 +166,8 @@ href="https://github.com/senbox-org/microwave-toolbox">https://github.com/senbox
 href="https://grass.osgeo.org/grass-stable/manuals/i.group.html">i.group</a>,
 <a
 href="https://grass.osgeo.org/grass-stable/manuals/i.rectify.html">i.rectify</a>,
-<a
+<a href="i.sar.coregistration.html">i.sar.coregistration</a>, <a
+href="i.sar.interferometry.html">i.sar.interferometry</a>, <a
 href="https://grass.osgeo.org/grass-stable/manuals/i.target.html">i.target</a>,
 <a
 href="https://grass.osgeo.org/grass-stable/manuals/r.in.gdal.html">r.in.gdal</a>,
