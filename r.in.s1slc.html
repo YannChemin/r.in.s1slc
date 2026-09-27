@@ -1,0 +1,163 @@
+<h2 id="description">DESCRIPTION</h2>
+<p><em>r.in.s1slc</em> imports Sentinel-1 TOPS (IW, EW) <strong>Single
+Look Complex (SLC)</strong> products in their native radar geometry
+(azimuth lines × slant-range samples). The product can be given as the
+downloaded <code>.zip</code> archive (read in place, without
+extraction), as the <code>.SAFE</code> directory or as its
+<code>manifest.safe</code> file.</p>
+<p>For every selected sub-swath and polarization the module can:</p>
+<ul>
+<li><strong>deburst</strong> the TOPS bursts into one continuous image
+(default), or keep every burst as its own map (<strong>-b</strong>
+flag);</li>
+<li>write the complex signal (<strong>measure=complex</strong>, maps
+<code>_i</code> and <code>_q</code>), the amplitude, the intensity, the
+intensity in decibels or the phase;</li>
+<li>apply the <strong>radiometric calibration</strong> of the product
+(<strong>calibration=sigma0|beta0|gamma0</strong>);</li>
+<li>remove the <strong>thermal noise</strong> (<strong>-n</strong> flag)
+from the power measures;</li>
+<li>write <strong>geolocation layers</strong> (latitude, longitude,
+height, incidence and elevation angles) interpolated from the annotation
+geolocation grid;</li>
+<li>store <strong>ground control points</strong> in an imagery group for
+<em>i.rectify</em>;</li>
+<li>import the <strong>product metadata</strong> (see below).</li>
+</ul>
+<p>Radar geometry has no map projection: the current project must be
+unprojected (XY). Create one with
+<code>grass -c XY &lt;path_to_project&gt; -e</code>. The module fails
+otherwise.</p>
+<h3 id="processing">Processing</h3>
+<p>The algorithms follow ESA SNAP (microwave toolbox), so that results
+can be compared with a SNAP <em>TOPSAR-Split → Calibration →
+TOPSAR-Deburst</em> chain:</p>
+<ul>
+<li><strong>Debursting</strong> (<em>TOPSAR-Deburst</em>): output lines
+are sampled every azimuth time interval from the first valid line of the
+first burst to the last valid line of the last burst. In the overlap of
+two bursts a line is taken from the earlier burst up to the middle of
+the overlap and from the later burst after it; lines are nearest
+neighbours (no resampling), so the complex values are the original ones.
+Samples outside the annotated valid range of each line
+(<code>firstValidSample</code>, <code>lastValidSample</code>) are
+null.</li>
+<li><strong>Calibration</strong>: <code>value / A</code> for the complex
+components and amplitude, <code>|DN|² / A²</code> for the intensity,
+where <code>A</code> is the sigmaNought, betaNought or gamma calibration
+vector, interpolated bilinearly in range (pixel) and azimuth time. The
+azimuth time used is the true zero-Doppler time of the source line in
+its burst.</li>
+<li><strong>Thermal noise removal</strong>: the noise power
+<code>N</code> is the product of the range noise vector of the burst
+(the one closest in time to the burst start, as SNAP does) and the
+azimuth noise vector (IPF ≥ 2.9), both linearly interpolated.
+<code>|DN|² − N</code> is clipped at 0 before calibration. It is not
+defined for the complex and phase measures, which are refused.</li>
+</ul>
+<h3 id="output-naming">Output naming</h3>
+<p>Maps are named <code>{output}_{swath}_{pol}_{measure}</code>, e.g.
+<code>s1_iw2_vv_i</code>, <code>s1_iw2_vv_q</code>,
+<code>s1_iw2_vv_intensity</code>. With the <strong>-b</strong> flag a
+burst tag is added: <code>s1_iw2_vv_b04_i</code>. Geolocation layers do
+not depend on the polarization: <code>s1_iw2_latitude</code>,
+<code>s1_iw2_b04_latitude</code>.</p>
+<p>Uncalibrated complex components are integer maps (CELL) holding the
+original 16-bit digital numbers; all other outputs are FCELL.</p>
+<p>Each map covers <code>0..cols</code> east and <code>0..rows</code>
+north, one cell per sample and line (like <em>r.in.gdal</em> for
+non-georeferenced data): use <code>g.region raster=&lt;map&gt;</code>
+before working with it.</p>
+<h3 id="imagery-groups-and-geocoding">Imagery groups and geocoding</h3>
+<p>One imagery group <code>{output}_{swath}_{pol}</code> (plus the burst
+tag with <strong>-b</strong>) is created for each image, containing its
+maps and the geolocation layers of the sub-swath. Its
+<code>POINTS</code> file holds ground control points taken from the
+annotation geolocation grid, mapped to the output lines through their
+azimuth time: image coordinates are cell centres, target coordinates are
+WGS84 longitude/latitude, or the CRS of the <strong>target</strong>
+project, which then also becomes the group target (see
+<em>i.target</em>). <em>i.rectify</em> can then geocode the maps; the
+thin plate spline method (<strong>-t</strong>) follows the grid
+best.</p>
+<p>The geolocation grid is given on the ellipsoid plus the annotated
+terrain height; in relief, terrain correction with a DEM is needed for
+accurate geocoding.</p>
+<h3 id="metadata">Metadata</h3>
+<p>Product metadata are imported with every map:</p>
+<ul>
+<li>title, units, source (product and measurement file), description and
+semantic label (e.g. <code>S1_VV_I</code>, <code>S1_VV_INTENSITY</code>,
+<code>S1_latitude</code>) with <em>r.support</em>;</li>
+<li>the azimuth time span of the image as timestamp
+(<em>r.timestamp</em>), in whole seconds;</li>
+<li>the command history;</li>
+<li>a JSON file
+<code>$MAPSET/cell_misc/&lt;map&gt;/description.json</code> with the
+manifest information (mission, absolute and relative orbit, pass, IPF
+version, footprint...), the sub-swath annotation (radar frequency,
+wavelength, range sampling rate, PRF, slant range time, pixel spacings,
+azimuth time interval, burst list with burst IDs, times and valid
+samples, orbit state vectors, Doppler centroid and azimuth FM rate
+polynomials, processing information, geolocation grid), the output
+raster geometry (first line azimuth time, source lines, bursts,
+debursting) and the measure, calibration and noise settings.</li>
+</ul>
+<p>These are the parameters needed by downstream processing such as
+coregistration and interferometry.</p>
+<h3 id="subsetting">Subsetting</h3>
+<p>A full IW SLC product holds three sub-swaths of nine bursts each,
+about 1.2 GB per sub-swath and polarization. Use <strong>swath</strong>,
+<strong>polarization</strong> and either <strong>bursts</strong>
+(1-based indices or ranges) or <strong>bbox</strong> (bursts
+intersecting a longitude/latitude box) to import only the area of
+interest. The <strong>-l</strong> flag lists the bursts of each
+sub-swath with their burst ID, azimuth time and footprint, and
+exits.</p>
+<h2 id="notes">NOTES</h2>
+<p>Merging the sub-swaths (<em>TOPSAR-Merge</em>) is not done: each
+sub-swath has its own slant range origin and is written separately.</p>
+<p>The module requires the GDAL Python bindings and NumPy.</p>
+<h2 id="examples">EXAMPLES</h2>
+<p>List the bursts of a product:</p>
+<div class="sourceCode" id="cb1"><pre class="sourceCode sh"><code class="sourceCode bash"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="ex">r.in.s1slc</span> <span class="at">-l</span> input=S1A_IW_SLC__1SDV_20230112T142507_20230112T142534_046752_059AD8_A55D.zip</span></code></pre></div>
+<p>Import the debursted complex signal of the bursts over Sharjah (UAE)
+from the IW2 VV image, with latitude and longitude layers:</p>
+<div class="sourceCode" id="cb2"><pre class="sourceCode sh"><code class="sourceCode bash"><span id="cb2-1"><a href="#cb2-1" aria-hidden="true" tabindex="-1"></a><span class="ex">grass</span> <span class="at">-c</span> XY <span class="va">$HOME</span>/grassdata/s1slc_sharjah <span class="at">-e</span></span>
+<span id="cb2-2"><a href="#cb2-2" aria-hidden="true" tabindex="-1"></a><span class="ex">grass</span> <span class="va">$HOME</span>/grassdata/s1slc_sharjah/PERMANENT <span class="at">--exec</span> <span class="dt">\</span></span>
+<span id="cb2-3"><a href="#cb2-3" aria-hidden="true" tabindex="-1"></a>    r.in.s1slc input=S1A_IW_SLC__1SDV_20230112T142507_20230112T142534_046752_059AD8_A55D.zip <span class="dt">\</span></span>
+<span id="cb2-4"><a href="#cb2-4" aria-hidden="true" tabindex="-1"></a>        output=s1_20230112 swath=IW2 polarization=VV bbox=55.35,25.25,55.50,25.40 <span class="dt">\</span></span>
+<span id="cb2-5"><a href="#cb2-5" aria-hidden="true" tabindex="-1"></a>        measure=complex geometry=latitude,longitude</span></code></pre></div>
+<p>Calibrated, noise-free sigma0 in dB of burst 5 of each sub-swath:</p>
+<div class="sourceCode" id="cb3"><pre class="sourceCode sh"><code class="sourceCode bash"><span id="cb3-1"><a href="#cb3-1" aria-hidden="true" tabindex="-1"></a><span class="ex">r.in.s1slc</span> <span class="at">-n</span> <span class="at">-b</span> input=S1A_IW_SLC__1SDV_20230112T142507_20230112T142534_046752_059AD8_A55D.zip <span class="dt">\</span></span>
+<span id="cb3-2"><a href="#cb3-2" aria-hidden="true" tabindex="-1"></a>    output=s1 bursts=5 measure=db calibration=sigma0</span></code></pre></div>
+<p>Geocode the result into a UTM project with the GCPs:</p>
+<div class="sourceCode" id="cb4"><pre class="sourceCode sh"><code class="sourceCode bash"><span id="cb4-1"><a href="#cb4-1" aria-hidden="true" tabindex="-1"></a><span class="ex">r.in.s1slc</span> input=... output=s1 swath=IW2 bursts=4-6 measure=db <span class="dt">\</span></span>
+<span id="cb4-2"><a href="#cb4-2" aria-hidden="true" tabindex="-1"></a>    calibration=sigma0 target=sharjah_utm40n</span>
+<span id="cb4-3"><a href="#cb4-3" aria-hidden="true" tabindex="-1"></a><span class="ex">i.rectify</span> <span class="at">-t</span> group=s1_iw2_vv extension=_utm resolution=10</span></code></pre></div>
+<h2 id="references">REFERENCES</h2>
+<ul>
+<li>ESA, <em>Sentinel-1 Product Specification</em>,
+S1-RS-MDA-52-7441.</li>
+<li>ESA, <em>Radiometric Calibration of S-1 Level-1 Products Generated
+by the S-1 IPF</em>, ESA-EOPG-CSCOP-TN-0002.</li>
+<li>ESA, <em>Thermal Denoising of Products Generated by the S-1
+IPF</em>, MPC-0392.</li>
+<li>ESA SNAP microwave toolbox: <a
+href="https://github.com/senbox-org/microwave-toolbox">https://github.com/senbox-org/microwave-toolbox</a></li>
+</ul>
+<h2 id="see-also">SEE ALSO</h2>
+<p><em><a
+href="https://grass.osgeo.org/grass-stable/manuals/i.group.html">i.group</a>,
+<a
+href="https://grass.osgeo.org/grass-stable/manuals/i.rectify.html">i.rectify</a>,
+<a
+href="https://grass.osgeo.org/grass-stable/manuals/i.target.html">i.target</a>,
+<a
+href="https://grass.osgeo.org/grass-stable/manuals/r.in.gdal.html">r.in.gdal</a>,
+<a href="r.in.sentinel.html">r.in.sentinel</a>, <a
+href="https://grass.osgeo.org/grass-stable/manuals/r.support.html">r.support</a>,
+<a
+href="https://grass.osgeo.org/grass-stable/manuals/r.timestamp.html">r.timestamp</a></em></p>
+<h2 id="authors">AUTHORS</h2>
+<p>Yann Chemin</p>
